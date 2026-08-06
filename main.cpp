@@ -220,8 +220,6 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	bool allSucceeded = true;
-
 	for (int i = 2; i < argc; i += 2) {
 		Ip senderIp(argv[i]);
 		Ip targetIp(argv[i + 1]);
@@ -238,7 +236,6 @@ int main(int argc, char* argv[]) {
 				stderr,
                 "failed to get Sender MAC\n"
 			);
-			allSucceeded = false;
 			continue;
 		}
 
@@ -248,7 +245,6 @@ int main(int argc, char* argv[]) {
 				senderMac,
 				senderIp,
 				targetIp)) {
-			allSucceeded = false;
 			continue;
 		}
 	}
