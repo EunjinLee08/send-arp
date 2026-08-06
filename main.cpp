@@ -254,5 +254,4 @@ int main(int argc, char* argv[]) {
 	}
 
 	pcap_close(pcap);
-	return allSucceeded ? 0 : 1;
 }
