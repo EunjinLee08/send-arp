@@ -88,77 +88,69 @@ Mac getSenderMac(
 	const Ip& attackerIp,
 	const Ip& senderIp
 ) {
-	for (int attempt = 0; attempt < 3; attempt++) {
-		if (!sendArpRequest(pcap, attackerMac, attackerIp, senderIp)) {
+	
+	if (!sendArpRequest(pcap, attackerMac, attackerIp, senderIp)) {
+		return Mac::nullMac();
+	}
+
+	while (true) {
+		struct pcap_pkthdr* header;
+		const u_char* rawPacket;
+
+		int result = pcap_next_ex(pcap, &header, &rawPacket);
+
+		if (result == 0) {
+			continue;
+		}
+
+		if (result == -1) {
+			fprintf(stderr, "pcap_next_ex failed: %s\n", pcap_geterr(pcap));
 			return Mac::nullMac();
 		}
 
-		for (int readCount = 0; readCount < 3000; readCount++) {
-			struct pcap_pkthdr* header;
-			const u_char* rawPacket;
-
-			int result = pcap_next_ex(pcap, &header, &rawPacket);
-
-			if (result == 0) {
-				continue;
-			}
-
-			if (result == -1) {
-				fprintf(stderr, "pcap_next_ex failed: %s\n", pcap_geterr(pcap));
-				return Mac::nullMac();
-			}
-
-			if (result == -2) {
-				return Mac::nullMac();
-			}
-
-			if (header->caplen < sizeof(EthArpPacket)) {
-				continue;
-			}
-
-			const EthArpPacket* packet =
-				reinterpret_cast<const EthArpPacket*>(rawPacket);
-
-			if (ntohs(packet->eth_.type_) != EthHdr::Arp) {
-				continue;
-			}
-
-			if (ntohs(packet->arp_.hrd_) != ArpHdr::ETHER ||
-				ntohs(packet->arp_.pro_) != EthHdr::Ip4 ||
-				packet->arp_.hln_ != Mac::Size ||
-				packet->arp_.pln_ != Ip::Size) {
-				continue;
-			}
-
-			if (ntohs(packet->arp_.op_) != ArpHdr::Reply) {
-				continue;
-			}
-
-			Ip replySenderIp(ntohl(packet->arp_.sip_));
-			Ip replyTargetIp(ntohl(packet->arp_.tip_));
-
-			if (!(replySenderIp == senderIp)) {
-				continue;
-			}
-
-			if (!(replyTargetIp == attackerIp)) {
-				continue;
-			}
-
-			if (!(packet->arp_.tmac_ == attackerMac)) {
-				continue;
-			}
-
-			return packet->arp_.smac_;
+		if (result == -2) {
+			return Mac::nullMac();
 		}
-	}
 
-	fprintf(
-		stderr,
-        "could not find MAC\n"
-	);
+		if (header->caplen < sizeof(EthArpPacket)) {
+			continue;
+		}
 
-	return Mac::nullMac();
+		const EthArpPacket* packet =
+			reinterpret_cast<const EthArpPacket*>(rawPacket);
+
+		if (ntohs(packet->eth_.type_) != EthHdr::Arp) {
+			continue;
+		}
+
+		if (ntohs(packet->arp_.hrd_) != ArpHdr::ETHER ||
+			ntohs(packet->arp_.pro_) != EthHdr::Ip4 ||
+			packet->arp_.hln_ != Mac::Size ||
+			packet->arp_.pln_ != Ip::Size) {
+			continue;
+		}
+
+		if (ntohs(packet->arp_.op_) != ArpHdr::Reply) {
+			continue;
+		}
+
+		Ip replySenderIp(ntohl(packet->arp_.sip_));
+		Ip replyTargetIp(ntohl(packet->arp_.tip_));
+
+		if (!(replySenderIp == senderIp)) {
+			continue;
+		}
+
+		if (!(replyTargetIp == attackerIp)) {
+			continue;
+		}
+
+		if (!(packet->arp_.tmac_ == attackerMac)) {
+			continue;
+		}
+
+		return packet->arp_.smac_;
+	} 
 }
 
 bool sendArpInfection(
@@ -213,10 +205,6 @@ int main(int argc, char* argv[]) {
 	}
 
 	Ip attackerIp(ATTACKER_IP);
-	if (attackerIp == Ip("0.0.0.0")) {
-		fprintf(stderr, "set ATTACKER_IP in main.cpp before running\n");
-		return 1;
-	}
 
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t* pcap = pcap_open_live(interface, BUFSIZ, 1, 1, errbuf);
@@ -253,8 +241,6 @@ int main(int argc, char* argv[]) {
 			allSucceeded = false;
 			continue;
 		}
-
-
 
 		if (!sendArpInfection(
 				pcap,
